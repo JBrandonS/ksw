@@ -7,8 +7,9 @@ import h5py
 
 from ksw import utils, legendre, estimator_core, fisher_core
 
-class KSW():
-    '''
+
+class KSW:
+    """
     Implementation of the Komatsu Spergel Wandelt estimator using the
     factorization by Smith and Zaldarriaga 2011.
 
@@ -17,14 +18,14 @@ class KSW():
     red_bispctra : (list of) ksw.ReducedBispectrum instance(s)
         Estimate fNL for these reduced bispectra.
     icov : callable
-        Function takes (npol, nelem) alm-like complex array "a" and returns the 
+        Function takes (npol, nelem) alm-like complex array "a" and returns the
         inverse-covariance-weighted version of that array.
     lmax : int
         Max multipole used in estimator. Should match shape of alms.
     pol : str or array-like of strings.
         Data polarization, e.g. "E", or ["T", "E"]. Should match shape of alms.
     precision : str, optional
-        Use either "single" precision or "double" precision data types 
+        Use either "single" precision or "double" precision data types
         for internal calculations.
 
     Attributes
@@ -42,7 +43,7 @@ class KSW():
     mc_gt : (npol, nelem) complex array, None
         Current <grad T (C^-1 a)> Monte Carlo estimate (eq 60 Smith Zaldarriaga).
     mc_gt_sq : float, None
-        Current <grad T (C^-1 a) C^-1 grad T(C^-1 a)^*> Monte Carlo estimate 
+        Current <grad T (C^-1 a) C^-1 grad T(C^-1 a)^*> Monte Carlo estimate
         (eq 61 Smith Zaldarriaga).
     thetas : (ntheta) array
         Coordinates of isolatitude rings.
@@ -51,10 +52,10 @@ class KSW():
     nphi : int
         Number of phi points.
     dtype : type
-        Dtype for real quantities, i.e. np.float32/np.float64 if precision is 
+        Dtype for real quantities, i.e. np.float32/np.float64 if precision is
         "single"/"double".
     cdtype : type
-        Dtype for complex quantities, i.e. np.complex64/np.complex128 if 
+        Dtype for complex quantities, i.e. np.complex64/np.complex128 if
         precision is "single"/"double".
 
     Notes
@@ -65,13 +66,12 @@ class KSW():
 
     where data = P s + n, where s are the spherical harmonic coefficients
     of the signal. P = M Y B, where B is the beam, Y is spherical harmonic
-    synthesis (alm2map) and M is the pixel mask and any custom filters. 
+    synthesis (alm2map) and M is the pixel mask and any custom filters.
     N^{-1} and S^{-1} are the inverse noise and signal covariance matrices,
     respectively. ^H denotes the Hermitian transpose.
-    '''
+    """
 
-    def __init__(self, red_bispectra, icov, lmax, pol, precision='single'):
-
+    def __init__(self, red_bispectra, icov, lmax, pol, precision="single"):
         self.red_bispectra = red_bispectra
         self.icov = icov
         self.mc_idx = 0
@@ -81,34 +81,34 @@ class KSW():
         self.lmax = lmax
         self.pol = pol
 
-        if precision == 'single':
+        if precision == "single":
             self.dtype = np.float32
             self.cdtype = np.complex64
-        elif precision == 'double':
+        elif precision == "double":
             self.dtype = np.float64
             self.cdtype = np.complex128
         else:
-            raise ValueError(f'{precision=} is not supported')
+            raise ValueError(f"{precision=} is not supported")
 
         if len(red_bispectra) > 1:
-            raise NotImplementedError('no joint estimation for now.')
+            raise NotImplementedError("no joint estimation for now.")
 
         self.thetas, self.theta_weights, self.nphi = self.get_coords()
 
     @property
     def pol(self):
         return self.__pol
-    
+
     @pol.setter
     def pol(self, pol):
-        '''Check input and make sorted tuple.'''
+        """Check input and make sorted tuple."""
         pol = list(np.atleast_1d(pol))
         sort_order = {"T": 0, "E": 1}
 
-        if pol.count('T') + pol.count('E') != len(pol):
-            raise ValueError(f'{pol=}, but may only contain T and/or E.')
-        elif pol.count('T') != 1 and pol.count('E') != 1:
-            raise ValueError(f'{pol=}, cannot contain duplicates.')
+        if pol.count("T") + pol.count("E") != len(pol):
+            raise ValueError(f"{pol=}, but may only contain T and/or E.")
+        elif pol.count("T") != 1 and pol.count("E") != 1:
+            raise ValueError(f"{pol=}, cannot contain duplicates.")
 
         pol.sort(key=lambda val: sort_order[val[0]])
         self.__pol = tuple(pol)
@@ -142,7 +142,7 @@ class KSW():
         self.__mc_gt_sq = mc_gt_sq
 
     def get_coords(self):
-        '''
+        """
         Compute samples on sphere that are sufficient for lmax.
 
         Returns
@@ -157,7 +157,7 @@ class KSW():
         Notes
         -----
         We use Gauss-Legendre weights for isolatitude rings, see astro-ph/0305537.
-        '''
+        """
 
         cos_thetas, ct_weights = roots_legendre(int(np.floor(1.5 * self.lmax) + 1))
         thetas = np.arccos(cos_thetas)
@@ -168,14 +168,14 @@ class KSW():
         return thetas, ct_weights, nphi
 
     def _init_reduced_bispectrum(self, red_bisp):
-        '''
+        """
         Prepare reduced bispectrum for estimation.
 
         Parameters
         ----------
         red_bisp : ksw.ReducedBispectrum instance
             Assumed to have both T and E.
-        
+
         Returns
         -------
         f_i_ell : (nufact, npol, nell) array
@@ -189,15 +189,15 @@ class KSW():
         ------
         ValueError
             If lmax of reduced bispectrum < lmax.
-        '''
-        
+        """
+
         if red_bisp.lmax < self.lmax:
-            raise ValueError('lmax bispectrum ({}) < lmax ({})'.format(
-                red_bisp.lmax, self.lmax))
+            raise ValueError(
+                "lmax bispectrum ({}) < lmax ({})".format(red_bisp.lmax, self.lmax)
+            )
 
         nufact = red_bisp.factors.shape[0]
-        f_i_ell = np.zeros((nufact, self.npol, self.lmax + 1),
-                           dtype=self.dtype)
+        f_i_ell = np.zeros((nufact, self.npol, self.lmax + 1), dtype=self.dtype)
 
         # Find index of lmax data in ells of red. bisp.
         try:
@@ -206,24 +206,25 @@ class KSW():
             end_ells_full = None
 
         # Slice corresponding to data pol. Assume red. bisp. has T and E.
-        if self.npol == 1 and 'T' in self.pol:
+        if self.npol == 1 and "T" in self.pol:
             pslice = slice(0, 1, None)
-        elif self.npol == 1 and 'E' in self.pol:
+        elif self.npol == 1 and "E" in self.pol:
             pslice = slice(1, 2, None)
         else:
             pslice = slice(0, 2, None)
 
-        f_i_ell[:,:,red_bisp.lmin:red_bisp.lmax+1] = \
-            red_bisp.factors[:,pslice,:end_ells_full]
+        f_i_ell[:, :, red_bisp.lmin : red_bisp.lmax + 1] = red_bisp.factors[
+            :, pslice, :end_ells_full
+        ]
         f_i_ell = f_i_ell.astype(self.dtype, copy=False)
-        
+
         rule = red_bisp.rule
         weights = red_bisp.weights.astype(self.dtype)
 
         return f_i_ell, rule, weights
 
     def _step(self, alm, theta_batch=25):
-        '''
+        """
         Calculate grad T (C^-1 a).
 
         Parameters
@@ -233,12 +234,12 @@ class KSW():
         theta_batch : int, optional
             Process loops over theta in batches of this size. Higher values
             take up more memory.
-        
+
         Returns
         -------
         grad_t : (nelem) or (npol, nelem) complex array
             HEALPix-ordered alm array.
-        '''
+        """
 
         alm = utils.alm_return_2d(alm, self.npol, self.lmax)
         a_ell_m = utils.alm2a_ell_m(alm)
@@ -249,13 +250,21 @@ class KSW():
         f_i_ell, rule, weights = self._init_reduced_bispectrum(red_bisp)
 
         for tidx_start in range(0, len(self.thetas), theta_batch):
-
-            thetas_batch = self.thetas[tidx_start:tidx_start+theta_batch]
-            ct_weights_batch = self.theta_weights[tidx_start:tidx_start+theta_batch]
-            y_m_ell = estimator_core.compute_ylm(thetas_batch, self.lmax,
-                                                 dtype=self.dtype)
-            estimator_core.step(ct_weights_batch, rule, weights, f_i_ell, a_ell_m, y_m_ell,
-                               grad_t, self.nphi)
+            thetas_batch = self.thetas[tidx_start : tidx_start + theta_batch]
+            ct_weights_batch = self.theta_weights[tidx_start : tidx_start + theta_batch]
+            y_m_ell = estimator_core.compute_ylm(
+                thetas_batch, self.lmax, dtype=self.dtype
+            )
+            estimator_core.step(
+                ct_weights_batch,
+                rule,
+                weights,
+                f_i_ell,
+                a_ell_m,
+                y_m_ell,
+                grad_t,
+                self.nphi,
+            )
 
         # Turn back into HEALPix shape.
         grad_t = utils.a_ell_m2alm(grad_t).astype(self.cdtype)
@@ -263,8 +272,8 @@ class KSW():
         return grad_t
 
     def step(self, alm, theta_batch=25):
-        '''
-        Add iteration to <grad T (C^-1 a) C^-1 grad T(C^-1 a)^*> and 
+        """
+        Add iteration to <grad T (C^-1 a) C^-1 grad T(C^-1 a)^*> and
         <grad T (C^-1 a)> Monte Carlo estimates.
 
         Parameters
@@ -279,7 +288,7 @@ class KSW():
         ------
         ValueError
             If shape input alm is not understood.
-        '''
+        """
 
         grad_t = self._step(alm, theta_batch=theta_batch)
 
@@ -299,9 +308,9 @@ class KSW():
         self.mc_idx += 1
 
     def step_batch(self, alm_loader, alm_files, comm=None, verbose=False, **kwargs):
-        '''
-        Add iterations to <grad T (C^-1 a) C^-1 grad T(C^-1 a)^*> and 
-        <grad T (C^-1 a)> Monte Carlo estimates by loading and processing several 
+        """
+        Add iterations to <grad T (C^-1 a) C^-1 grad T(C^-1 a)^*> and
+        <grad T (C^-1 a)> Monte Carlo estimates by loading and processing several
         alms in parallel using MPI.
 
         Parameters
@@ -314,8 +323,8 @@ class KSW():
         verbose : bool, optional
             Print process.
         kwargs : dict, optional
-            Optional keyword arguments passed to "_step".        
-        '''
+            Optional keyword arguments passed to "_step".
+        """
 
         if comm is None:
             comm = utils.FakeMPIComm()
@@ -326,13 +335,12 @@ class KSW():
         mc_gt_loc = None
 
         # Split alm_file loop over ranks.
-        for alm_file in alm_files[comm.Get_rank():len(alm_files):comm.Get_size()]:
-
+        for alm_file in alm_files[comm.Get_rank() : len(alm_files) : comm.Get_size()]:
             if verbose:
-                print(f'rank {comm.rank:3}: loading {alm_file}')
+                print(f"rank {comm.rank:3}: loading {alm_file}")
             alm = alm_loader(alm_file)
             if verbose:
-                print(f'rank {comm.rank:3}: done loading')
+                print(f"rank {comm.rank:3}: done loading")
             grad_t = self._step(alm, **kwargs)
 
             if mc_gt_loc is None:
@@ -346,20 +354,21 @@ class KSW():
                 mc_gt_sq_loc = mc_gt_sq
             else:
                 mc_gt_sq_loc += mc_gt_sq
-        
+
             mc_idx_loc += 1
 
-        print(f'rank : {comm.rank:3} waiting in step_batch')
         # To allow allreduce when number of ranks > alm files.
         shape, dtype = utils.bcast_array_meta(mc_gt_loc, comm, root=0)
-        if mc_gt_loc is None: mc_gt_loc = np.zeros(shape, dtype=dtype)
-        if mc_gt_sq_loc is None: mc_gt_sq_loc = 0.
-        if mc_idx_loc is None: mc_idx_loc = 0
+        if mc_gt_loc is None:
+            mc_gt_loc = np.zeros(shape, dtype=dtype)
+        if mc_gt_sq_loc is None:
+            mc_gt_sq_loc = 0.0
+        if mc_idx_loc is None:
+            mc_idx_loc = 0
 
         mc_gt = utils.allreduce_array(mc_gt_loc, comm)
-        mc_gt_sq = utils.allreduce(mc_gt_sq_loc, comm)        
+        mc_gt_sq = utils.allreduce(mc_gt_sq_loc, comm)
         mc_idx = utils.allreduce(mc_idx_loc, comm)
-        print(f'rank : {comm.rank:3} after reduce in step_batch')
 
         # All ranks get to update the internal mc variables themselves.
         if self.mc_gt is None:
@@ -371,12 +380,13 @@ class KSW():
             self.mc_gt_sq = mc_gt_sq
         else:
             self.__mc_gt_sq += mc_gt_sq
-                
+
         self.mc_idx += mc_idx
 
-    def compute_estimate_batch(self, alm_loader, alm_files, comm=None, 
-                               verbose=False, **kwargs):
-        '''
+    def compute_estimate_batch(
+        self, alm_loader, alm_files, comm=None, verbose=False, **kwargs
+    ):
+        """
         Compute fNL estimates for a collection of maps in parallel using MPI.
 
         Parameters
@@ -389,7 +399,7 @@ class KSW():
         verbose : bool, optional
             Print process.
         kwargs : dict, optional
-            Optional keyword arguments passed to "compute_estimate".        
+            Optional keyword arguments passed to "compute_estimate".
 
         Returns
         -------
@@ -401,7 +411,7 @@ class KSW():
             Linear terms for each input file in same order as "alm_files".
         fishers : (nalm_files) array
             Fisher information for each input file in same order as "alm_files".
-        '''
+        """
 
         if comm is None:
             comm = utils.FakeMPIComm()
@@ -409,42 +419,41 @@ class KSW():
         estimates = np.zeros(len(alm_files))
         cubic_terms = np.zeros(len(alm_files))
         lin_terms = np.zeros(len(alm_files))
-        fishers = np.zeros(len(alm_files))        
+        fishers = np.zeros(len(alm_files))
 
         # NOTE, silly to recompute fisher for each aidx.
-        
+
         # Split alm_file loop over ranks.
         for aidx in range(comm.Get_rank(), len(alm_files), comm.Get_size()):
-        
             alm_file = alm_files[aidx]
             if verbose:
-                print(f'rank {comm.rank:3}: loading {alm_file}')
+                print(f"rank {comm.rank:3}: loading {alm_file}")
             alm = alm_loader(alm_file)
-            
+
             estimate, cubic, lin_term, fisher = self.compute_estimate(alm, **kwargs)
             if verbose:
-                print(f'rank {comm.rank:3}: {estimate=}')
+                print(f"rank {comm.rank:3}: {estimate=}")
 
             estimates[aidx] = estimate
             cubic_terms[aidx] = cubic
             lin_terms[aidx] = lin_term
-            fishers[aidx] = fisher          
-            
+            fishers[aidx] = fisher
+
         estimates = utils.allreduce_array(estimates, comm)
         cubic_terms = utils.allreduce_array(cubic_terms, comm)
         lin_terms = utils.allreduce_array(lin_terms, comm)
         fishers = utils.allreduce_array(fishers, comm)
 
         return estimates, cubic_terms, lin_terms, fishers
-                    
+
     def compute_estimate(self, alm, theta_batch=25, fisher=None, lin_term=None):
-        '''
+        """
         Compute fNL estimate for input alm.
 
         Parameters
         ----------
         alm : (npol, nelem) array
-            HEALPix-ordered inverse-covariance filtered data.        
+            HEALPix-ordered inverse-covariance filtered data.
         theta_batch : int, optional
             Process loop over theta in batches of this size. Higher values
             take up more memory.
@@ -464,7 +473,7 @@ class KSW():
             Linear term.
         fisher : float
             Fisher information.
-        
+
         Raises
         ------
         ValueError
@@ -474,17 +483,17 @@ class KSW():
         Notes
         -----
         Similar to step, but only do backward transform, multiply alm
-        with linear term and apply normalization.        
-        '''
+        with linear term and apply normalization.
+        """
 
         alm = utils.alm_return_2d(alm, self.npol, self.lmax)
 
-        t_cubic = 0 # The cubic estimate.
+        t_cubic = 0  # The cubic estimate.
         if fisher is None:
             fisher = self.compute_fisher()
         if lin_term is None:
             lin_term = self.compute_linear_term(alm)
-        
+
         a_ell_m = utils.alm2a_ell_m(alm)
         a_ell_m = a_ell_m.astype(self.cdtype)
 
@@ -492,36 +501,35 @@ class KSW():
         f_i_ell, rule, weights = self._init_reduced_bispectrum(red_bisp)
 
         for tidx_start in range(0, len(self.thetas), theta_batch):
-            thetas_batch = self.thetas[tidx_start:tidx_start+theta_batch]
-            ct_weights_batch = self.theta_weights[tidx_start:tidx_start+theta_batch]
-            y_m_ell = estimator_core.compute_ylm(thetas_batch, self.lmax,
-                                                 dtype=self.dtype)            
-            t_cubic += estimator_core.compute_estimate(ct_weights_batch, rule, weights,
-                                                       f_i_ell, a_ell_m, y_m_ell, self.nphi)
+            thetas_batch = self.thetas[tidx_start : tidx_start + theta_batch]
+            ct_weights_batch = self.theta_weights[tidx_start : tidx_start + theta_batch]
+            y_m_ell = estimator_core.compute_ylm(
+                thetas_batch, self.lmax, dtype=self.dtype
+            )
+            t_cubic += estimator_core.compute_estimate(
+                ct_weights_batch, rule, weights, f_i_ell, a_ell_m, y_m_ell, self.nphi
+            )
 
         fnl = (t_cubic - lin_term) / fisher
-        print(f'{fnl=}, {t_cubic=}, {lin_term=}, {fisher=}')
         return fnl, t_cubic, lin_term, fisher
 
     def compute_fisher(self, return_icov_mc_gt=False):
-        '''
+        """
         Return Fisher information at current iteration.
 
         Returns
         -------
         fisher : float, None
             Fisher information.
-        '''
+        """
 
         if self.mc_gt_sq is None or self.mc_gt is None:
             return None
-        
+
         icov_mc_gt = self.icov(self.mc_gt)
 
         mc_gt_icov_mc_gt = utils.contract_almxblm(self.mc_gt, np.conj(icov_mc_gt))
-        fisher = (self.mc_gt_sq - mc_gt_icov_mc_gt) / 3.
-
-        print(f'{fisher=}, {self.mc_gt_sq=}, {mc_gt_icov_mc_gt=}')
+        fisher = (self.mc_gt_sq - mc_gt_icov_mc_gt) / 3.0
 
         if return_icov_mc_gt:
             return fisher, icov_mc_gt
@@ -529,14 +537,14 @@ class KSW():
             return fisher
 
     def compute_linear_term(self, alm):
-        '''
+        """
         Return linear term at current iteration for input data alm.
 
         Parameters
         ----------
         alm : (npol, nelem) complex array
             HEALPix-ordered inverse-covariance filtered data.
-        
+
         Returns
         -------
         lin_term : float, None
@@ -546,32 +554,33 @@ class KSW():
         -----
         Linear term is defined as sum(a C^-1 grad T[C^-1 a]). See Eq. 57 in
         Smith & Zaldarriaga.
-        '''
+        """
 
         if self.mc_gt is None:
             return None
 
         alm = utils.alm_return_2d(alm, self.npol, self.lmax)
-            
+
         return utils.contract_almxblm(alm, np.conj(self.mc_gt))
 
-    def compute_fisher_isotropic(self, icov_ell, return_matrix=False, fsky=1, 
-                                 comm=None):
-        '''
+    def compute_fisher_isotropic(
+        self, icov_ell, return_matrix=False, fsky=1, comm=None
+    ):
+        """
         Return Fisher information assuming that inverse noise + signal
         covariance is diagonal in harmonic space.
-        
+
         Arguments
         ---------
         icov_ell : (npol, npol, nell) or (npol, nell) array
-            Inverse covariance matrix diagonal in ell. Unlike "icov" this 
-            should be: 1 / (S_ell + (b^{-1} N b^{-1})_ell), so no beam in 
+            Inverse covariance matrix diagonal in ell. Unlike "icov" this
+            should be: 1 / (S_ell + (b^{-1} N b^{-1})_ell), so no beam in
             the numerator.
         return_matrix : bool, optonal
-            If set, also return nfact x nfact Fisher matrix.       
+            If set, also return nfact x nfact Fisher matrix.
         fsky : int or (npol,) array.
             Fraction of sky observed, allowed to vary between polarizations.
-        comm : MPI communicator, optional        
+        comm : MPI communicator, optional
 
         Returns
         -------
@@ -579,7 +588,7 @@ class KSW():
             Fisher information.
         fisher_nxn : (nfact, nfact) array, None
             nfact x nfact Fisher matrix (only if return_matrix is set).
-        '''
+        """
 
         if comm is None:
             comm = utils.FakeMPIComm()
@@ -588,39 +597,106 @@ class KSW():
         f_i_ell, rule, weights = self._init_reduced_bispectrum(red_bisp)
         f_ell_i = np.ascontiguousarray(np.transpose(f_i_ell, (2, 1, 0)))
         del f_i_ell
-        f_ell_i *= np.atleast_1d(fsky ** (1/6))[np.newaxis,:,np.newaxis]
+        f_ell_i *= np.atleast_1d(fsky ** (1 / 6))[np.newaxis, :, np.newaxis]
 
         sqrt_icov_ell = mat_utils.matpow(icov_ell, 0.5)
-        sqrt_icov_ell = np.ascontiguousarray(np.transpose(sqrt_icov_ell, (2, 0, 1)),
-                                             dtype=self.dtype)
+        sqrt_icov_ell = np.ascontiguousarray(
+            np.transpose(sqrt_icov_ell, (2, 0, 1)), dtype=self.dtype
+        )
 
         nrule = rule.shape[0]
         fisher_nxn = np.zeros((nrule, nrule), dtype=self.dtype)
 
-        thetas_per_rank = np.array_split(
-            self.thetas, comm.Get_size())[comm.Get_rank()]
-        ct_weights_per_rank = np.array_split(
-            self.theta_weights, comm.Get_size())[comm.Get_rank()]
+        thetas_per_rank = np.array_split(self.thetas, comm.Get_size())[comm.Get_rank()]
+        ct_weights_per_rank = np.array_split(self.theta_weights, comm.Get_size())[
+            comm.Get_rank()
+        ]
 
-        fisher_core.fisher_nxn(sqrt_icov_ell, f_ell_i, thetas_per_rank,
-                               ct_weights_per_rank, rule, weights, fisher_nxn)
-        
+        print("pre", fisher_nxn)
+        fisher_core.fisher_nxn(
+            sqrt_icov_ell,
+            f_ell_i,
+            thetas_per_rank,
+            ct_weights_per_rank,
+            rule,
+            weights,
+            fisher_nxn,
+        )
+        print("post", fisher_nxn, flush=True)
+
         fisher_nxn = utils.allreduce_array(fisher_nxn, comm)
         fisher_nxn = np.triu(fisher_nxn, 1).T + np.triu(fisher_nxn)
 
         fisher = np.sum(fisher_nxn)
-        with np.printoptions(threshold=np.inf):
-            print(f'{fisher_nxn=}')
-        print(f'{fisher=}')
-        
+
         if return_matrix:
-            return fisher, fisher_nxn 
+            return fisher, fisher_nxn
 
         return fisher
 
+    def compute_fisher_multi(
+        self, icov_ell, red_bispectra, return_matrix=False, fsky=1, comm=None
+    ):
+        """
+        in progress
+        """
+
+        if comm is None:
+            comm = utils.FakeMPIComm()
+
+        f_ell_is = []
+        rules = []
+        weights = []
+        for red_bisp in red_bispectra:
+            f_i_ell, rule, weight = self._init_reduced_bispectrum(red_bisp)
+            f_ell_i = np.ascontiguousarray(np.transpose(f_i_ell, (2, 1, 0)))
+            del f_i_ell
+            f_ell_i *= np.atleast_1d(fsky ** (1 / 6))[np.newaxis, :, np.newaxis]
+
+            print("f_ell_i shape:", f_ell_i.shape)
+            f_ell_is.append(f_ell_i)
+            rules.append(rule)
+            weights.append(weight)
+
+        sqrt_icov_ell = mat_utils.matpow(icov_ell, 0.5)
+        sqrt_icov_ell = np.ascontiguousarray(
+            np.transpose(sqrt_icov_ell, (2, 0, 1)), dtype=self.dtype
+        )
+
+        for r in rules:
+            print("rule shape", r.shape)
+
+        nrule = rule[0].shape[0]
+        nb = len(red_bispectra)
+        print(nb)
+        fisher_nxnxnxn = np.zeros((nb, nb, nrule, nrule), dtype=self.dtype)
+
+        thetas_per_rank = np.array_split(self.thetas, comm.Get_size())[comm.Get_rank()]
+        ct_weights_per_rank = np.array_split(self.theta_weights, comm.Get_size())[
+            comm.Get_rank()
+        ]
+
+        fisher_core.fisher_nxnxnxn(
+            sqrt_icov_ell,
+            f_ell_is,
+            thetas_per_rank,
+            ct_weights_per_rank,
+            rules,
+            weights,
+            fisher_nxnxnxn,
+        )
+
+        fisher_nxnxnxn = utils.allreduce_array(fisher_nxnxnxn, comm)
+        print("preprepre", fisher_nxnxnxn, flush=True)
+        fisher_nxnxnxn = np.triu(fisher_nxnxnxn, 1).T + np.triu(fisher_nxnxnxn)
+        print("postpre", fisher_nxnxnxn, flush=True)
+        fisher_mat = np.sum(fisher_nxnxnxn, axis=(2, 3))
+        print("post", fisher_mat, flush=True)
+        return fisher_mat
+
     def compute_ng_sim(self, alm, theta_batch=25):
-        '''
-        Compute non-Gaussian perturbation to input simulation. 
+        """
+        Compute non-Gaussian perturbation to input simulation.
 
         Parameters
         ----------
@@ -635,7 +711,7 @@ class KSW():
         -------
         alm_ng : (nelem) or (npol, nelem) complex array
             Non-Gaussian perturbation.
-        
+
         Raises
         ------
         ValueError
@@ -645,16 +721,24 @@ class KSW():
         -----
         Follwing Eq. 83 in Smith and Zaldarriaga. This function only
         computes the non-Gaussian component: 1 / 3 grad T [Cl^{-1} a].
-        '''
+        """
 
         alm_ng = self._step(alm, theta_batch=theta_batch)
         alm_ng /= 3
-        
+
         return alm_ng
 
-    def compute_ng_sim_batch(self, alm_loader, alm_files, alm_writer,
-                             oalm_files, comm=None, verbose=False, **kwargs):
-        '''
+    def compute_ng_sim_batch(
+        self,
+        alm_loader,
+        alm_files,
+        alm_writer,
+        oalm_files,
+        comm=None,
+        verbose=False,
+        **kwargs,
+    ):
+        """
         Compute non-Gaussian perturbation to input simulation by loading
         and processing several alms in parallel using MPI.
 
@@ -679,39 +763,37 @@ class KSW():
         ------
         ValueError
             If alm_files and oalm_files do not match.
-        '''
+        """
 
         if len(alm_files) != len(oalm_files):
-            raise ValueError(f'{len(alm_files)=} != {oalm_files=}')
-        
+            raise ValueError(f"{len(alm_files)=} != {oalm_files=}")
+
         if comm is None:
             comm = utils.FakeMPIComm()
 
-        idx_on_rank = np.array_split(
-            np.arange(len(alm_files)), comm.size)[comm.rank]
+        idx_on_rank = np.array_split(np.arange(len(alm_files)), comm.size)[comm.rank]
         for idx in idx_on_rank:
-
             alm_file = alm_files[idx]
             oalm_file = oalm_files[idx]
 
             if verbose:
-                print(f'rank {comm.rank:3}: loading {alm_file}')
+                print(f"rank {comm.rank:3}: loading {alm_file}")
             alm = alm_loader(alm_file)
             if verbose:
-                print(f'rank {comm.rank:3}: done loading {alm_file}')
-                
+                print(f"rank {comm.rank:3}: done loading {alm_file}")
+
             alm_ng = self.compute_ng_sim(alm, **kwargs)
 
             if verbose:
-                print(f'rank {comm.rank:3}: writing {oalm_file}')
-                
+                print(f"rank {comm.rank:3}: writing {oalm_file}")
+
             alm_writer(oalm_file, alm_ng)
 
             if verbose:
-                print(f'rank {comm.rank:3}: done writing {oalm_file}')
-            
+                print(f"rank {comm.rank:3}: done writing {oalm_file}")
+
     def write_state(self, filename, comm=None):
-        '''
+        """
         Write internal state, i.e. mc_gt, mc_gt_sq and mc_idx, to hdf5 file.
 
         Parameters
@@ -720,7 +802,7 @@ class KSW():
             Absolute path to output file.
         comm : MPI communicator, optional
             If provided, rank 0 is assumed to do the writing, so must be present.
-        '''
+        """
 
         if comm is None:
             comm = utils.FakeMPIComm()
@@ -734,20 +816,20 @@ class KSW():
             if self.__mc_gt_sq is None:
                 mc_gt_sq_to_save = np.asarray([np.nan], dtype=np.float64)
             else:
-                mc_gt_sq_to_save = np.asarray([self.__mc_gt_sq], dtype=np.float64)            
+                mc_gt_sq_to_save = np.asarray([self.__mc_gt_sq], dtype=np.float64)
 
             if self.__mc_gt is None:
                 mc_gt_to_save = np.asarray([np.nan], dtype=self.cdtype)
             else:
                 mc_gt_to_save = self.__mc_gt
 
-            with h5py.File(filename + '.hdf5', 'w') as f:
-                f.create_dataset('mc_idx', data=mc_idx_to_save)
-                f.create_dataset('mc_gt_sq', data=mc_gt_sq_to_save)
-                f.create_dataset('mc_gt', data=mc_gt_to_save)
-        
+            with h5py.File(filename + ".hdf5", "w") as f:
+                f.create_dataset("mc_idx", data=mc_idx_to_save)
+                f.create_dataset("mc_gt_sq", data=mc_gt_sq_to_save)
+                f.create_dataset("mc_gt", data=mc_gt_to_save)
+
     def _read_state(self, filename, comm=None):
-        '''
+        """
         Read internal state, i.e. mc_gt, mc_gt_sq and mc_idx, from hdf5 file.
 
         Parameters
@@ -755,7 +837,7 @@ class KSW():
         filename : str
             Absolute path to output file.
         comm : MPI communicator, optional
-            If provided, rank 0 is assumed to do the reading, result will be 
+            If provided, rank 0 is assumed to do the reading, result will be
             broadcasted to all ranks.
 
         Returns
@@ -766,7 +848,7 @@ class KSW():
             <grad T (C^-1 a) C^-1 grad T(C^-1 a)^*>
         mc_gt : (npol, nelem) complex array, None
             <grad T (C^-1 a)> Monte Carlo estimate.
-        '''
+        """
 
         if comm is None:
             comm = utils.FakeMPIComm()
@@ -775,15 +857,16 @@ class KSW():
             # Remove file extension to be consistent.
             filename, _ = os.path.splitext(filename)
 
-            with h5py.File(filename + '.hdf5', 'r') as f:
-                mc_idx_read = f['mc_idx'][()]
-                mc_gt_sq_read = f['mc_gt_sq'][()]
-                mc_gt_read = f['mc_gt'][()]
+            with h5py.File(filename + ".hdf5", "r") as f:
+                mc_idx_read = f["mc_idx"][()]
+                mc_gt_sq_read = f["mc_gt_sq"][()]
+                mc_gt_read = f["mc_gt"][()]
 
-            assert mc_idx_read.size == 1, (f'mc_idx has to be single int, got '
-                                      f'{mc_idx.size}-sized array')
+            assert mc_idx_read.size == 1, (
+                f"mc_idx has to be single int, got {mc_idx.size}-sized array"
+            )
             mc_idx_read = int(mc_idx_read[0])
-                        
+
         else:
             mc_idx_read = None
             mc_gt_sq_read = None
@@ -800,11 +883,11 @@ class KSW():
 
         if mc_gt_read.size == 1 and np.isnan(mc_gt_read)[0]:
             mc_gt_read = None
-        
+
         return mc_idx_read, mc_gt_sq_read, mc_gt_read
-        
+
     def start_from_read_state(self, filename, comm=None):
-        '''
+        """
         Update estimator state with mc_gt, mc_gt_sq and mc_idx read from .hdf5 file.
 
         Parameters
@@ -812,13 +895,12 @@ class KSW():
         filename : str
             Absolute path to output file.
         comm : MPI communicator, optional
-            If provided, rank 0 is assumed to do the reading, result will be 
+            If provided, rank 0 is assumed to do the reading, result will be
             broadcasted to all ranks.
-        '''
-        
-        mc_idx_read, mc_gt_sq_read, mc_gt_read = self._read_state(
-            filename, comm=comm)
-        
+        """
+
+        mc_idx_read, mc_gt_sq_read, mc_gt_read = self._read_state(filename, comm=comm)
+
         self.mc_idx = mc_idx_read
         self.__mc_gt_sq = mc_gt_sq_read
         self.__mc_gt = mc_gt_read
