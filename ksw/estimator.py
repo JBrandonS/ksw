@@ -605,14 +605,13 @@ class KSW:
         )
 
         nrule = rule.shape[0]
-        fisher_nxn = np.zeros((nrule, nrule), dtype=self.dtype)
+        fisher_nxn = np.ascontiguousarray(np.zeros((nrule, nrule), dtype=self.dtype))
 
         thetas_per_rank = np.array_split(self.thetas, comm.Get_size())[comm.Get_rank()]
         ct_weights_per_rank = np.array_split(self.theta_weights, comm.Get_size())[
             comm.Get_rank()
         ]
 
-        print("pre", fisher_nxn)
         fisher_core.fisher_nxn(
             sqrt_icov_ell,
             f_ell_i,
@@ -622,7 +621,6 @@ class KSW:
             weights,
             fisher_nxn,
         )
-        print("post", fisher_nxn, flush=True)
 
         fisher_nxn = utils.allreduce_array(fisher_nxn, comm)
         fisher_nxn = np.triu(fisher_nxn, 1).T + np.triu(fisher_nxn)
@@ -644,55 +642,34 @@ class KSW:
         if comm is None:
             comm = utils.FakeMPIComm()
 
-        f_ell_is = []
-        rules = []
-        weights = []
+        f_ell_is, rules, weights = [], [], []
         for red_bisp in red_bispectra:
             f_i_ell, rule, weight = self._init_reduced_bispectrum(red_bisp)
             f_ell_i = np.ascontiguousarray(np.transpose(f_i_ell, (2, 1, 0)))
             del f_i_ell
             f_ell_i *= np.atleast_1d(fsky ** (1 / 6))[np.newaxis, :, np.newaxis]
 
-            print("f_ell_i shape:", f_ell_i.shape)
             f_ell_is.append(f_ell_i)
             rules.append(rule)
             weights.append(weight)
 
         sqrt_icov_ell = mat_utils.matpow(icov_ell, 0.5)
-        sqrt_icov_ell = np.ascontiguousarray(
-            np.transpose(sqrt_icov_ell, (2, 0, 1)), dtype=self.dtype
-        )
-
-        for r in rules:
-            print("rule shape", r.shape)
-
-        nrule = rule[0].shape[0]
-        nb = len(red_bispectra)
-        print(nb)
-        fisher_nxnxnxn = np.zeros((nb, nb, nrule, nrule), dtype=self.dtype)
+        sqrt_icov_ell = np.transpose(sqrt_icov_ell, (2, 0, 1))
+        sqrt_icov_ell = np.ascontiguousarray(sqrt_icov_ell, dtype=self.dtype)
 
         thetas_per_rank = np.array_split(self.thetas, comm.Get_size())[comm.Get_rank()]
-        ct_weights_per_rank = np.array_split(self.theta_weights, comm.Get_size())[
-            comm.Get_rank()
-        ]
+        ct_weights_per_rank = np.array_split(self.theta_weights, comm.Get_size())
+        ct_weights_per_rank = ct_weights_per_rank[comm.Get_rank()]
 
-        fisher_core.fisher_nxnxnxn(
+        return fisher_core.fisher_multi(
             sqrt_icov_ell,
             f_ell_is,
             thetas_per_rank,
             ct_weights_per_rank,
             rules,
             weights,
-            fisher_nxnxnxn,
+            comm,
         )
-
-        fisher_nxnxnxn = utils.allreduce_array(fisher_nxnxnxn, comm)
-        print("preprepre", fisher_nxnxnxn, flush=True)
-        fisher_nxnxnxn = np.triu(fisher_nxnxnxn, 1).T + np.triu(fisher_nxnxnxn)
-        print("postpre", fisher_nxnxnxn, flush=True)
-        fisher_mat = np.sum(fisher_nxnxnxn, axis=(2, 3))
-        print("post", fisher_mat, flush=True)
-        return fisher_mat
 
     def compute_ng_sim(self, alm, theta_batch=25):
         """

@@ -19,9 +19,9 @@ LP_IDIR = $(DIR)/libpshtlight
 NEWDIRS = $(LDIR) $(ODIR) $(TDIR)/obj $(TDIR)/bin
 $(info $(shell mkdir -p -v $(NEWDIRS)))
 
-CFLAGS = -g -Wall -fpic -std=c99 -I/usr/include
+CFLAGS = -Wall -fpic -std=c99 -I/usr/include
 OMPFLAG = -fopenmp
-OPTFLAG = -march=native -O0 -ffast-math
+OPTFLAG = -march=native -O2 -ffast-math
 
 RF_OBJECTS = $(ODIR)/radial_functional.o \
              $(ODIR)/common.o \

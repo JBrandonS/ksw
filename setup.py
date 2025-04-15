@@ -1,3 +1,4 @@
+from sys import version
 from distutils.core import setup
 from distutils.extension import Extension
 from distutils.sysconfig import get_python_inc
@@ -13,12 +14,14 @@ path = str(Path(__file__).parent.absolute())
 compile_opts = {
     "extra_compile_args": [
         "-shared",
-        "-std=gnu99",
+        "-std=c99",
         "-fopenmp",
         "-Wno-strict-aliasing",
-        "-g",
+        "-O2",
+        "-march=native",
+        "-ffast-math",
     ],
-    "extra_link_args": ["-Wl,-rpath," + opj(path, "lib"), "-g"],
+    "extra_link_args": ["-Wl,-rpath," + opj(path, "lib"), "-lm"],
 }
 
 compiler_directives = {"language_level": 3}
@@ -70,7 +73,11 @@ ext_modules = [
 setup(
     name="ksw",
     packages=["ksw"],
+    version="0.0.1",
     ext_modules=cythonize(
-        ext_modules, compiler_directives=compiler_directives, gdb_debug=True
+        ext_modules,
+        compiler_directives=compiler_directives,
+        # gdb_debug=True,
+        # annotate=True,
     ),
 )
