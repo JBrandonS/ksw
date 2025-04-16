@@ -19,7 +19,7 @@ LP_IDIR = $(DIR)/libpshtlight
 NEWDIRS = $(LDIR) $(ODIR) $(TDIR)/obj $(TDIR)/bin
 $(info $(shell mkdir -p -v $(NEWDIRS)))
 
-CFLAGS = -Wall -fpic -std=c99 -I/usr/include
+CFLAGS = -g -Wall -fpic -std=c99 -I/usr/include
 OMPFLAG = -fopenmp
 OPTFLAG = -march=native -O2 -ffast-math
 
@@ -121,3 +121,5 @@ clean:
 	rm -rf $(PDIR)/__pycache__
 	rm -rf $(TDIR)/python/__pycache__
 	rm -rf $(DIR)/*.egg-info
+	rm -f $(CDIR)/*.html
+	rm -rf $(DIR)/cython_debug
