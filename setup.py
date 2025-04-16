@@ -17,11 +17,9 @@ compile_opts = {
         "-std=c99",
         "-fopenmp",
         "-Wno-strict-aliasing",
-        "-O2",
-        "-march=native",
-        "-ffast-math",
+        "-g",
     ],
-    "extra_link_args": ["-Wl,-rpath," + opj(path, "lib"), "-lm"],
+    "extra_link_args": ["-Wl,-rpath," + opj(path, "lib")],
 }
 
 compiler_directives = {"language_level": 3}
@@ -77,7 +75,5 @@ setup(
     ext_modules=cythonize(
         ext_modules,
         compiler_directives=compiler_directives,
-        # gdb_debug=True,
-        # annotate=True,
     ),
 )
