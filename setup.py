@@ -73,7 +73,6 @@ setup(
     packages=["ksw"],
     version="0.0.1",
     ext_modules=cythonize(
-        ext_modules,
-        compiler_directives=compiler_directives,
+        ext_modules, compiler_directives=compiler_directives, gdb_debug=True
     ),
 )

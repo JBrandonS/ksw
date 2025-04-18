@@ -381,34 +381,18 @@ void unique_axb_on_ring_sp(const float *sqrt_icov_ell, const float *f_ell_i_a, c
 			CblasRowMajor,    // Layout: Row-major storage for matrices.
 			CblasTrans,       // TransA: Transpose the first input matrix (work_i).
 			CblasNoTrans,     // TransB: Do not transpose the second input matrix (work_j).
-			nufact_a,         // M: Number of rows in the result matrix (unique_nxn).
-			nufact_b,         // N: Number of columns in the result matrix (unique_nxn).
+			nufact_a,         // M: Number of rows op(A) and C.
+			nufact_b,         // N: Number of columns op(B) and C.
 			npol,             // K: Shared dimension of work_i and work_j (number of columns in work_i and rows in work_j).
 			p_ell[lidx] * prefactor[lidx], // alpha: Scalar multiplier for the product of work_i^T and work_j.
-			work_i,           // A: The first input matrix (work_i).
+			work_i,           // A: The first input matrix (work_i), size lda*k.
 			nufact_a,             // lda: Leading dimension of work_i (number of columns in work_i).
-			work_j,           // B: The second input matrix (work_j).
+			work_j,           // B: The second input matrix (work_j) size ldb * k.
 			nufact_b,             // ldb: Leading dimension of work_j (number of columns in work_j).
 			1.0,              // beta: Scalar multiplier for the existing values in unique_nxn.
 			unique_nxn,       // C: The result matrix (unique_nxn).
 			nufact_b          // ldc: Leading dimension of unique_nxn (number of columns in unique_nxn).
 		);
-
-		// P * work^T x work -> unique_nxn.
-		// C = alpha * A^T * A + beta * C
-		// cblas_ssyrk(
-		// 	CblasRowMajor, // Layout: Specifies row-major storage for matrices.
-		// 	CblasUpper,    // Uplo: Specifies that the upper triangular part of the result matrix is to be computed.
-		// 	CblasTrans,    // Trans: Specifies that the transpose of the input matrix (work_i) is used in the computation.
-		// 	nufact,        // N: The order of the result matrix (unique_nxn), which is N x N.
-		// 	npol,          // K: The number of columns in the input matrix (work_i) before transposing.
-		// 	p_ell[lidx] * prefactor[lidx], // alpha: Scalar multiplier for the product of work_i^T and work_i.
-		// 	work_i,        // A: The input matrix (work_i), which is transposed in the computation.
-		// 	nufact,        // lda: The leading dimension of the input matrix (work_i).
-		// 	1.0,           // beta: Scalar multiplier for the existing values in the result matrix (unique_nxn).
-		// 	unique_nxn,    // C: The result matrix (unique_nxn), which is updated with the computed values.
-		// 	nufact         // ldc: The leading dimension of the result matrix (unique_nxn).
-		// );
 	}
 }
 
@@ -427,7 +411,8 @@ void fisher_axb_on_ring_sp(const float *unique_nxn, const long long *rule_a, con
 		float wz = weights_a[ridx * 3 + 2];
 
 		// We only fill upper triangular part.
-		for (ptrdiff_t rjdx = ridx; rjdx < nrule_b; rjdx++) {
+		// for (ptrdiff_t rjdx = ridx; rjdx < nrule_b; rjdx++) {
+		for (ptrdiff_t rjdx = 0; rjdx < nrule_b; rjdx++) {
 
 			long long rpx = rule_b[rjdx * 3];
 			long long rpy = rule_b[rjdx * 3 + 1];
@@ -438,21 +423,12 @@ void fisher_axb_on_ring_sp(const float *unique_nxn, const long long *rule_a, con
 			float wpz = weights_b[rjdx * 3 + 2];
 
 			int nufact = nufact_b;
-
-			// r and rp are indices into unique_nxn. Min/max to only acces uppper tri part.
-			float tmp = unique_nxn[_min(rx, rpx) * nufact + _max(rx, rpx)] * unique_nxn[_min(ry, rpy) * nufact + _max(ry, rpy)] * unique_nxn[_min(rz, rpz) * nufact + _max(rz, rpz)];
-
-			// + 5 permutations.
-			tmp += unique_nxn[_min(rx, rpz) * nufact + _max(rx, rpz)] * unique_nxn[_min(ry, rpx) * nufact + _max(ry, rpx)] * unique_nxn[_min(rz, rpy) * nufact + _max(rz, rpy)];
-
-			tmp += unique_nxn[_min(rx, rpy) * nufact + _max(rx, rpy)] * unique_nxn[_min(ry, rpz) * nufact + _max(ry, rpz)] * unique_nxn[_min(rz, rpx) * nufact + _max(rz, rpx)];
-
-			tmp += unique_nxn[_min(rx, rpx) * nufact + _max(rx, rpx)] * unique_nxn[_min(ry, rpz) * nufact + _max(ry, rpz)] * unique_nxn[_min(rz, rpy) * nufact + _max(rz, rpy)];
-
-			tmp += unique_nxn[_min(rx, rpy) * nufact + _max(rx, rpy)] * unique_nxn[_min(ry, rpx) * nufact + _max(ry, rpx)] * unique_nxn[_min(rz, rpz) * nufact + _max(rz, rpz)];
-
-			tmp += unique_nxn[_min(rx, rpz) * nufact + _max(rx, rpz)] * unique_nxn[_min(ry, rpy) * nufact + _max(ry, rpy)] * unique_nxn[_min(rz, rpx) * nufact + _max(rz, rpx)];
-			// eq 29
+			float tmp = unique_nxn[rx * nufact + rpx] * unique_nxn[ry * nufact + rpy] * unique_nxn[rz * nufact + rpz];
+			tmp += unique_nxn[rx * nufact + rpz] * unique_nxn[ry * nufact + rpx] * unique_nxn[rz * nufact + rpy];
+			tmp += unique_nxn[rx * nufact + rpy] * unique_nxn[ry * nufact + rpz] * unique_nxn[rz * nufact + rpx];
+			tmp += unique_nxn[rx * nufact + rpx] * unique_nxn[ry * nufact + rpz] * unique_nxn[rz * nufact + rpy];
+			tmp += unique_nxn[rx * nufact + rpy] * unique_nxn[ry * nufact + rpx] * unique_nxn[rz * nufact + rpz];
+			tmp += unique_nxn[rx * nufact + rpz] * unique_nxn[ry * nufact + rpy] * unique_nxn[rz * nufact + rpx];
 			fisher_nxn[ridx * nrule_b + rjdx] += tmp * wx * wy * wz * wpx * wpy * wpz * (float)(ct_weight * 2 * PI * PI / 9);
 		}
 	}
@@ -464,8 +440,8 @@ void fisher_axb_sp(const float *sqrt_icov_ell, const float *f_ell_i_a, const flo
 
 	int nell = lmax + 1;
 
-	float *p_theta_ell = malloc(sizeof * p_theta_ell * ntheta * nell);
-	float *prefactor = malloc(sizeof * prefactor * nell);
+	float *p_theta_ell = calloc(ntheta * nell, sizeof * p_theta_ell);
+	float *prefactor = calloc(nell, sizeof * prefactor);
 
 	if (p_theta_ell == NULL || prefactor == NULL) {
 		free(p_theta_ell);
@@ -474,19 +450,18 @@ void fisher_axb_sp(const float *sqrt_icov_ell, const float *f_ell_i_a, const flo
 	}
 
 	for (ptrdiff_t lidx = 0; lidx < nell; lidx++) {
-		// for eq 30
 		prefactor[lidx] = (2 * lidx + 1) / 4. / PI;
 	}
 
 	compute_associated_legendre_sp(thetas, p_theta_ell, ntheta, lmax);
 
-#pragma omp parallel num_threads(8)
+#pragma omp parallel
 	{
 		mkl_set_num_threads_local(1);
 
-		float *work_i = malloc(sizeof * work_i * npol * nufact_a);
-		float *work_j = malloc(sizeof * work_j * npol * nufact_b);
-		float *unique_nxn = malloc(sizeof * unique_nxn * nufact_a * nufact_b);
+		float *work_i = calloc(npol * nufact_a, sizeof * work_i);
+		float *work_j = calloc(npol * nufact_b, sizeof * work_j);
+		float *unique_nxn = calloc(nufact_a * nufact_b, sizeof * unique_nxn);
 		float *fisher_nxn_priv = calloc(nrule_a * nrule_b, sizeof * fisher_nxn_priv);
 
 		if (work_i == NULL || work_j == NULL || unique_nxn == NULL || fisher_nxn_priv == NULL) {
@@ -509,7 +484,8 @@ void fisher_axb_sp(const float *sqrt_icov_ell, const float *f_ell_i_a, const flo
 #pragma omp critical
 		{
 			for (ptrdiff_t idx = 0; idx < nrule_a; idx++) {
-				for (ptrdiff_t jdx = idx; jdx < nrule_b; jdx++) {
+				// for (ptrdiff_t jdx = idx; jdx < nrule_b; jdx++) {
+				for (ptrdiff_t jdx = 0; jdx < nrule_b; jdx++) {
 					fisher_nxn[idx * nrule_b + jdx] += fisher_nxn_priv[idx * nrule_b + jdx];
 				}
 			}

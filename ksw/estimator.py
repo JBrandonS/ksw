@@ -4,6 +4,7 @@ from scipy.special import roots_legendre
 
 from optweight import mat_utils
 import h5py
+from itertools import product
 
 from ksw import utils, legendre, estimator_core, fisher_core
 
@@ -632,21 +633,15 @@ class KSW:
 
         return fisher
 
-    def compute_fisher_multi(
-        self, icov_ell, red_bispectra, return_matrix=False, fsky=1, comm=None
-    ):
-        """
-        in progress
-        """
-
+    def compute_fisher_multi(self, icov_ell, red_bispectra, fsky=1.0, comm=None):
         if comm is None:
             comm = utils.FakeMPIComm()
 
+        n_bispec = len(red_bispectra)
         f_ell_is, rules, weights = [], [], []
         for red_bisp in red_bispectra:
             f_i_ell, rule, weight = self._init_reduced_bispectrum(red_bisp)
             f_ell_i = np.ascontiguousarray(np.transpose(f_i_ell, (2, 1, 0)))
-            del f_i_ell
             f_ell_i *= np.atleast_1d(fsky ** (1 / 6))[np.newaxis, :, np.newaxis]
 
             f_ell_is.append(f_ell_i)
@@ -661,15 +656,47 @@ class KSW:
         ct_weights_per_rank = np.array_split(self.theta_weights, comm.Get_size())
         ct_weights_per_rank = ct_weights_per_rank[comm.Get_rank()]
 
-        return fisher_core.fisher_multi(
-            sqrt_icov_ell,
-            f_ell_is,
-            thetas_per_rank,
-            ct_weights_per_rank,
-            rules,
-            weights,
-            comm,
+        fisher_mat = np.ascontiguousarray(
+            np.zeros((n_bispec, n_bispec), dtype=self.dtype)
         )
+
+        for i, j in product(range(n_bispec), repeat=2):
+            nell, npol, nufact_a = f_ell_is[i].shape
+            nell_b, npol_b, nufact_b = f_ell_is[j].shape
+
+            if nell != nell_b:
+                raise ValueError(
+                    f"nell dimension of f_ell_i : {nell} "
+                    f"does not match nell of f_ell_j : {nell_b}"
+                )
+            if npol != npol_b:
+                raise ValueError(
+                    f"npol dimension of f_ell_i : {npol} "
+                    f"does not match npol of f_ell_j : {npol_b}"
+                )
+
+            fisher_nxn = np.ascontiguousarray(
+                np.zeros((rules[i].shape[0], rules[j].shape[0]), dtype=self.dtype)
+            )
+
+            fisher_core.fisher_multi(
+                sqrt_icov_ell,
+                f_ell_is[i],
+                f_ell_is[j],
+                thetas_per_rank,
+                ct_weights_per_rank,
+                rules[i],
+                rules[j],
+                weights[i],
+                weights[j],
+                fisher_nxn,
+            )
+
+            fisher_nxn = utils.allreduce_array(fisher_nxn, comm)
+            # tri = np.triu(fisher_nxn, 1).T + np.triu(fisher_nxn)
+            fisher_mat[i, j] = np.sum(np.array(fisher_nxn))
+
+        return fisher_mat
 
     def compute_ng_sim(self, alm, theta_batch=25):
         """
