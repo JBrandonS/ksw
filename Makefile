@@ -19,7 +19,7 @@ LP_IDIR = $(DIR)/libpshtlight
 NEWDIRS = $(LDIR) $(ODIR) $(TDIR)/obj $(TDIR)/bin
 $(info $(shell mkdir -p -v $(NEWDIRS)))
 
-CFLAGS = -g -Wall -fpic -std=c99 -I/usr/include
+CFLAGS = -Wall -fpic -std=c99
 OMPFLAG = -fopenmp
 OPTFLAG = -march=native -O2 -ffast-math
 

@@ -17,7 +17,6 @@ compile_opts = {
         "-std=c99",
         "-fopenmp",
         "-Wno-strict-aliasing",
-        "-g",
     ],
     "extra_link_args": ["-Wl,-rpath," + opj(path, "lib")],
 }
@@ -72,7 +71,5 @@ setup(
     name="ksw",
     packages=["ksw"],
     version="0.0.1",
-    ext_modules=cythonize(
-        ext_modules, compiler_directives=compiler_directives, gdb_debug=True
-    ),
+    ext_modules=cythonize(ext_modules, compiler_directives=compiler_directives),
 )
